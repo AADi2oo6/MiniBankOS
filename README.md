@@ -32,7 +32,8 @@ BankingOS/
 │   │        ├── Scheduler.java
 │   │        ├── PriorityScheduler.java
 │   │        ├── RoundRobinQueue.java
-│   │        └── TransactionProcess.java
+│   │        ├──TransactionProcess.java
+|   |        └──TimeSlice.java
 │   │
 │   ├── system/
 │   │   ├── Account.java
