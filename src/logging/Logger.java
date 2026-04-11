@@ -4,17 +4,18 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.File;
 import java.io.PrintWriter;
+import system.PageTable;
 
 public class Logger{
-    private final String logFile="data\\transaction.log";
+    private final PageTable pageTable=new PageTable();
+    private final File logFile=pageTable.getFile("transaction-log");
 
     public Logger(){
         try{
-            File file=new File(logFile);
             //if non existent create new file and directory
-            if(!file.exists()){
-                file.getParentFile().mkdirs();
-                file.createNewFile();
+            if(!logFile.exists()){
+                logFile.getParentFile().mkdirs();
+                logFile.createNewFile();
             }
         }
         catch(IOException e){

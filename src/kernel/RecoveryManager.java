@@ -1,21 +1,33 @@
 package kernel;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import system.BankDatabase;
+import system.PageTable;
 
 public class RecoveryManager{
-    private BankDatabase bank;
+    private TransactionManager transactionManager;
+    private PageTable pageTable;
     
-    public RecoveryManager(BankDatabase bank){
-        this.bank=bank;
+    public RecoveryManager(TransactionManager transactionManager){
+        this.transactionManager=transactionManager;
+        this.pageTable=new PageTable();
 
     }
 
     public void recover(){
         System.out.println("Recovering transactions...");
-        try(BufferedReader br= new BufferedReader(new FileReader("data/transaction.log"))){
+        if(transactionManager.hasCommittedStorage()){
+            return;
+        }
+
+        File transactionLog=pageTable.getFile("transaction-log");
+        if(!transactionLog.exists()){
+            return;
+        }
+
+        try(BufferedReader br= new BufferedReader(new FileReader(transactionLog))){
             String line;
             while((line=br.readLine())!=null){
                 if(line.startsWith("COMMIT")){
@@ -30,19 +42,39 @@ public class RecoveryManager{
         }
     }
     private void replay(String command){
-        String[] tokens=command.split("\\s+");
-        if(tokens[0].equalsIgnoreCase(command)){
-            String name=tokens[1];
-            double balance=Double.parseDouble(tokens[2]);
-            bank.createAccount(name, balance);
-            
-        }
-        if(tokens[0].equalsIgnoreCase("TRANSFER")){
-            String from=tokens[1];
-            String to=tokens[2];
-            double amount=Double.parseDouble(to);
+        try{
+            String[] tokens=command.split("\\s+");
+            if(tokens.length==0){
+                return;
+            }
+            if(tokens[0].equalsIgnoreCase("CREATE") && tokens.length==3){
+                String name=tokens[1];
+                double balance=Double.parseDouble(tokens[2]);
+                transactionManager.recoverCreateAccount(name, balance);
+                
+            }
+            else if(tokens[0].equalsIgnoreCase("TRANSFER") && tokens.length==4){
+                String from=tokens[1];
+                String to=tokens[2];
+                double amount=Double.parseDouble(tokens[3]);
 
-            bank.transfer(from, to, amount);
+                transactionManager.recoverTransfer(from, to, amount);
+            }
+            else if(tokens[0].equalsIgnoreCase("DEPOSIT") && tokens.length==3){
+                String name=tokens[1];
+                double amount=Double.parseDouble(tokens[2]);
+
+                transactionManager.recoverDeposit(name, amount);
+            }
+            else if(tokens[0].equalsIgnoreCase("WITHDRAW") && tokens.length==3){
+                String name=tokens[1];
+                double amount=Double.parseDouble(tokens[2]);
+
+                transactionManager.recoverWithdraw(name, amount);
+            }
+        }
+        catch(NumberFormatException e){
+            System.out.println("Skipping malformed transaction log entry.");
         }
     }
 }

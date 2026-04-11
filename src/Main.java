@@ -1,4 +1,5 @@
 import Auth.AuthManager;
+import kernel.ModeBit;
 import kernel.RecoveryManager;
 import kernel.scheduler.Scheduler;
 import shell.*;
@@ -10,13 +11,12 @@ public class Main {
     public static void main(String args[]){
         BankDatabase bank=new BankDatabase();
         Scheduler scheduler=new Scheduler();
+        ModeBit modeBit=new ModeBit();
         
         AuthManager authManager=new AuthManager();
-        TransactionManager transactionManager= new TransactionManager(bank, scheduler, authManager);
+        TransactionManager transactionManager= new TransactionManager(bank, scheduler, authManager, modeBit);
 
-        scheduler.start();
-
-        RecoveryManager recovery=new RecoveryManager(bank);
+        RecoveryManager recovery=new RecoveryManager(transactionManager);
         recovery.recover();
 
         Terminal terminal=new Terminal(transactionManager, authManager);

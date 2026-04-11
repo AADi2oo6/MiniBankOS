@@ -1,0 +1,1 @@
+id,borrower,loanAmount,currentPrincipal,durationYears,remainingMonths,annualInterestRate,lastUpdatedAt,nextUpdateAt,status,state

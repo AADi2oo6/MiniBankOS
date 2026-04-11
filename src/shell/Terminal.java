@@ -1,15 +1,12 @@
 package shell;
 
 import java.util.Scanner;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import Auth.*;
 
 import kernel.TransactionManager;
 
 public class Terminal {
     private CommandParser parser;
-    private BlockingQueue<String> commandQueue=new LinkedBlockingQueue<>();
     private AuthManager authManager;
 
     public Terminal(TransactionManager transactionManager, AuthManager authManager){
@@ -20,47 +17,40 @@ public class Terminal {
         Scanner sc=new Scanner(System.in);
         
         System.out.println("Booting BankingOS...");
-        System.out.println("BankingOS Terminal Ready. Type 'help' for a list of commands. *Reminder to add help command*\n Type 'exit' to shutdown.");
-        
-    
-        Thread inputThread=new Thread(() -> {
+        System.out.println("BankingOS Terminal Ready. Type 'help' for a list of commands.\n Type 'exit' to shutdown.");
 
-            while(true){
+        while(true){
+            try{
                 String username="guest";
                 if(Session.isLoggedIn()){
                     username=Session.getCurrentUser().getUsername();
                 }
+
                 System.out.print("BankingOS@"+username+"> ");
-                
                 String command=sc.nextLine().trim();
 
-                if(command.isEmpty()) continue;
-                try{
-                    commandQueue.put(command);
+                if(command.isEmpty()){
+                    continue;
                 }
-                catch(Exception e){
-                    e.printStackTrace();
-                }
+
                 if(command.equalsIgnoreCase("exit")){
-                    break;
-                }
-            }
-        });
-        
-        Thread executorThread=new Thread(() -> {
-            while(true){
-                try{
-                    String command=commandQueue.take();
-                    if(command.equalsIgnoreCase("exit")){
+                    parser.shutdown();
                     System.out.println("Shutting down BankingOS...");
                     break;
                 }
-                String []tokens=command.split(" ");
+
+                String []tokens=command.trim().split("\\s+");
                 String cmd=tokens[0];
 
+                if(cmd.equalsIgnoreCase("help")){
+                    parser.parse(command);
+                    System.out.println();
+                    continue;
+                }
+
                 if(cmd.equalsIgnoreCase("register")){
-                    if(tokens.length<3){
-                        System.out.println("Usage: register <username> <password>");
+                    if(tokens.length!=3){
+                        HelpPrinter.printUsage("register");
                         continue;
                     }
                     boolean success=authManager.register(tokens[1],tokens[2]);
@@ -74,8 +64,8 @@ public class Terminal {
                     continue;
                 }
                 if(cmd.equalsIgnoreCase("login")){
-                    if(tokens.length>3){
-                        System.out.println("Usage: login <username> <password>");
+                    if(tokens.length!=3){
+                        HelpPrinter.printUsage("login");
                         continue;
                     }
                     user u=authManager.login(tokens[1], tokens[2]);
@@ -89,6 +79,10 @@ public class Terminal {
                     continue;
                 }
                 if(cmd.equalsIgnoreCase("logout")){
+                    if(tokens.length!=1){
+                        HelpPrinter.printUsage("logout");
+                        continue;
+                    }
                     Session.logout();
                     System.out.println("Logged out.");
                     continue;
@@ -100,19 +94,10 @@ public class Terminal {
                 }
                 parser.parse(command);
                 System.out.println();
-
-
-                System.out.println();
-                System.out.println("BankingOS@terminal$: ");
-                }
-                catch(Exception e){
-                    e.printStackTrace();
-                }
-                }
-            });
-
-        inputThread.start();
-        executorThread.start();
-    
+            }
+            catch(Exception e){
+                e.printStackTrace();
+            }
+        }
     }
 }

@@ -9,6 +9,10 @@ public class CommandParser{
         this.tm=tm;
     }
 
+    public void shutdown(){
+        tm.shutdown();
+    }
+
 
     public void parse(String command){
         command=command.trim();
@@ -17,28 +21,46 @@ public class CommandParser{
         }
         String tokens[]=command.split("\\s+");
 
-        if(tokens[0].equalsIgnoreCase("create")){
-            if(tokens.length<3){
-                System.out.println("Usage: create <name> <balance>");
+        if(tokens[0].equalsIgnoreCase("help")){
+            if(tokens.length==1){
+                HelpPrinter.printAll();
+                return;
+            }
+            if(tokens.length==2){
+                HelpPrinter.printCommand(tokens[1]);
+                return;
+            }
+            HelpPrinter.printUsage("help");
+        }
+        else if(tokens[0].equalsIgnoreCase("create")){
+            if(tokens.length!=4){
+                HelpPrinter.printUsage("create");
                 return;
             }
             String name = tokens[1];
-            double balance= Double.parseDouble(tokens[2]);
+            double balance;
+            try{
+                balance= Double.parseDouble(tokens[3]);
+            }
+            catch(NumberFormatException e){
+                System.out.println("Invalid balance.");
+                return;
+            }
 
-            tm.createAccount(name,balance);
+            tm.createAccount(name, tokens[2], balance);
 
         }
         else if(tokens[0].equalsIgnoreCase("balance")){
-            if(tokens.length<2){
-                System.out.println("Usage: balance <name>");
+            if(tokens.length!=2){
+                HelpPrinter.printUsage("balance");
                 return;
             }
             String name=tokens[1];
             tm.checkBalance(name);
         }
         else if(tokens[0].equalsIgnoreCase("transfer")){
-            if(tokens.length<4){
-                System.out.println("Usage: tranfer <sender_name> <receiver_name> <amount>");
+            if(tokens.length!=4){
+                HelpPrinter.printUsage("transfer");
                 return;
             }
             try{
@@ -49,51 +71,119 @@ public class CommandParser{
                 System.out.println("Invalid amount.");
             }
         }
+        else if(tokens[0].equalsIgnoreCase("deposit")){
+            if(tokens.length!=3){
+                HelpPrinter.printUsage("deposit");
+                return;
+            }
+            try{
+                double amount=Double.parseDouble(tokens[2]);
+                tm.deposit(tokens[1], amount);
+            }
+            catch(NumberFormatException e){
+                System.out.println("Invalid amount.");
+            }
+        }
+        else if(tokens[0].equalsIgnoreCase("withdraw")){
+            if(tokens.length!=3){
+                HelpPrinter.printUsage("withdraw");
+                return;
+            }
+            try{
+                double amount=Double.parseDouble(tokens[2]);
+                tm.withdraw(tokens[1], amount);
+            }
+            catch(NumberFormatException e){
+                System.out.println("Invalid amount.");
+            }
+        }
+        else if(tokens[0].equalsIgnoreCase("transactions") || tokens[0].equalsIgnoreCase("history")){
+            if(tokens.length!=2){
+                HelpPrinter.printUsage(tokens[0]);
+                return;
+            }
+            tm.showTransactions(tokens[1]);
+        }
+        else if(tokens[0].equalsIgnoreCase("loan")){
+            if(tokens.length!=5){
+                HelpPrinter.printUsage("loan");
+                return;
+            }
+            try{
+                double amount=Double.parseDouble(tokens[3]);
+                int durationYears=Integer.parseInt(tokens[4]);
+                tm.createLoan(tokens[1], tokens[2], amount, durationYears);
+            }
+            catch(NumberFormatException e){
+                System.out.println("Invalid loan amount or duration.");
+            }
+        }
+        else if(tokens[0].equalsIgnoreCase("loans")){
+            if(tokens.length!=2){
+                HelpPrinter.printUsage("loans");
+                return;
+            }
+            tm.showLoans(tokens[1]);
+        }
+        else if(tokens[0].equalsIgnoreCase("loanrates")){
+            if(tokens.length!=1){
+                HelpPrinter.printUsage("loanrates");
+                return;
+            }
+            tm.showLoanRates();
+        }
+        else if(tokens[0].equalsIgnoreCase("loanupdate")){
+            if(tokens.length!=1){
+                HelpPrinter.printUsage("loanupdate");
+                return;
+            }
+            tm.updateLoansNow();
+        }
         else if(tokens[0].equalsIgnoreCase("register")){
-            if(tokens.length<3){
-                System.out.println("Usage: register <username> <password>");
+            if(tokens.length!=3){
+                HelpPrinter.printUsage("register");
                 return;
             }
             tm.register(tokens[1],tokens[2]);
         }
         else if(tokens[0].equalsIgnoreCase("login")){
-            if(tokens.length<3){
-                System.out.println("Usage: login <username> <password>");
+            if(tokens.length!=3){
+                HelpPrinter.printUsage("login");
                 return;
             }
             tm.login(tokens[1],tokens[2]);
         }
         else if(tokens[0].equalsIgnoreCase("logout")){
-            if(tokens.length<3){
-                System.out.println("Usage: logout <username> <password>");
+            if(tokens.length!=1){
+                HelpPrinter.printUsage("logout");
                 return;
             }
-            tm.logout(tokens[1],tokens[2]);
+            tm.logout();
         }
         else if(tokens[0].equalsIgnoreCase("grant")){
-            if(tokens.length<3){
-                System.out.println("Usage: grant <username>");
+            if(tokens.length!=2){
+                HelpPrinter.printUsage("grant");
                 return;
             }
             tm.grantTransfer(tokens[1]);
         }
         else if(tokens[0].equalsIgnoreCase("revoke")){
-            if(tokens.length<3){
-                System.out.println("Usage: revoke <username>");
+            if(tokens.length!=2){
+                HelpPrinter.printUsage("revoke");
                 return;
             }
             tm.revokeTransfer(tokens[1]);
         }
         else if(tokens[0].equalsIgnoreCase("delete")){
-            if(tokens.length<3){
-                System.out.println("Usage: delete <username> ");
+            if(tokens.length!=2){
+                HelpPrinter.printUsage("delete");
                 return;
             }
             tm.deleteUser(tokens[1]);
         }
         else{
             System.out.println(tokens[0]+" is not a valid command.");
-            System.out.println("Unknown command. Type 'help' for a list of commands.*Reminder to add help command*");
+            System.out.println("Run 'help' to see all commands.");
         }
         return;
     }

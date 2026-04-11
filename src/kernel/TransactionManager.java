@@ -1,11 +1,9 @@
 package kernel;
 
 import system.BankDatabase;
+import system.LoanManager;
 import logging.Logger;
 import kernel.scheduler.*;
-
-import java.util.HashMap;
-import java.util.Map;
 
 import Auth.AuthManager;
 import Auth.Session;
@@ -16,13 +14,18 @@ public class TransactionManager{
     private Logger logger;
     private Scheduler scheduler;
     private AuthManager authManager;
+    private ModeBit modeBit;
+    private LoanManager loanManager;
 
 
-    public TransactionManager(BankDatabase bank, Scheduler scheduler, AuthManager authManager){
+    public TransactionManager(BankDatabase bank, Scheduler scheduler, AuthManager authManager, ModeBit modeBit){
         this.bank=bank;
         this.scheduler=scheduler;
         this.logger=new Logger();//new logger object for each thread
         this.authManager=authManager;
+        this.modeBit=modeBit;
+        this.loanManager=new LoanManager();
+        this.loanManager.startRealtimeUpdates();
     }
     public void createAccount(String name, double balance){
         user current=Session.getCurrentUser();
@@ -31,17 +34,88 @@ public class TransactionManager{
             System.out.println("Access denied: Only admin can create accounts.");
             return;
         }
+        System.out.println("Warning: account created without login credentials. Use: create <account_name> <password> <opening_balance>");
+        submitCreateAccount(name, balance);
+    }
+
+    public void createAccount(String name, String password, double balance){
+        user current=Session.getCurrentUser();
+        
+        if(current==null || !current.isAdmin()){
+            System.out.println("Access denied: Only admin can create accounts.");
+            return;
+        }
+        if(password==null || password.trim().isEmpty()){
+            System.out.println("Password cannot be empty.");
+            return;
+        }
+
+        boolean accountExists=bank.hasAccount(name);
+        boolean loginExists=authManager.getuser(name)!=null;
+
+        if(accountExists && loginExists){
+            System.out.println("This account name already exists and already has login credentials.");
+            return;
+        }
+
+        if(accountExists){
+            boolean createdLogin=authManager.register(name, password);
+            if(createdLogin){
+                System.out.println("Account already exists. Login credentials created for "+name+".");
+            }
+            else{
+                System.out.println("Login user could not be created.");
+            }
+            return;
+        }
+
+        boolean createdLogin=false;
+        if(!loginExists){
+            createdLogin=authManager.register(name, password);
+            if(!createdLogin){
+                System.out.println("Login user could not be created.");
+                return;
+            }
+        }
+        else{
+            System.out.println("Login user already exists. Keeping the existing password.");
+        }
+
+        boolean createdAccount=submitCreateAccount(name, balance);
+        if(!createdAccount && createdLogin){
+            authManager.deleteUser(name);
+        }
+    }
+
+    public void recoverCreateAccount(String name, double balance){
+        submitRecoveryCreateAccount(name, balance);
+    }
+
+    private boolean submitCreateAccount(String name, double balance){
         String logEntry="CREATE "+ name+ " " + balance;
+        boolean[] success={false};
         TransactionProcess process= new TransactionProcess(
             "TX-"+System.currentTimeMillis(),
             () ->{
             logger.log("BEGIN "+logEntry);
-            bank.createAccount(name, balance);
-            logger.log("COMMIT "+logEntry);
+            if(bank.createAccount(name, balance)){
+                success[0]=true;
+                logger.log("COMMIT "+logEntry);
+            }
         },
         2//priority
     );
-        scheduler.submitProcess(process);
+        submitKernelProcess(process);
+        return success[0];
+    }
+
+    private void submitRecoveryCreateAccount(String name, double balance){
+        TransactionProcess process= new TransactionProcess(
+            "REC-"+System.currentTimeMillis(),
+            () -> bank.recoverCreateAccount(name, balance),
+            2
+        );
+        submitKernelProcess(process);
     }
     public void transfer(String from, String to, double amount){
         user current = Session.getCurrentUser();
@@ -68,18 +142,128 @@ public class TransactionManager{
             return;
         }
 
-        //if cursor has reached till this point it can transfer
+        submitTransfer(from, to, amount);
+    }
+
+    public void recoverTransfer(String from, String to, double amount){
+        submitRecoveryTransfer(from, to, amount);
+    }
+
+    private void submitTransfer(String from, String to, double amount){
         String logEntry="TRANSFER "+from+" "+to+" "+amount;
         TransactionProcess process=new TransactionProcess(
             "TX-"+System.currentTimeMillis(),
             () ->{
                 logger.log("BEGIN "+logEntry);
-                bank.transfer(from, to, amount);
-                logger.log("COMMIT "+logEntry);
+                if(bank.transfer(from, to, amount)){
+                    logger.log("COMMIT "+logEntry);
+                }
             },
             1//higher priority
         );
-        scheduler.submitProcess(process);
+        submitKernelProcess(process);
+    }
+
+    private void submitRecoveryTransfer(String from, String to, double amount){
+        TransactionProcess process=new TransactionProcess(
+            "REC-"+System.currentTimeMillis(),
+            () -> bank.recoverTransfer(from, to, amount),
+            1
+        );
+        submitKernelProcess(process);
+    }
+
+    public void deposit(String name, double amount){
+        user current=Session.getCurrentUser();
+        if(current==null){
+            System.out.println("Access denied: not logged in.");
+            return;
+        }
+        if(!current.isAdmin() && !current.getUsername().equals(name)){
+            System.out.println("Access denied: Cannot deposit to other accounts.");
+            return;
+        }
+        submitDeposit(name, amount);
+    }
+
+    public void recoverDeposit(String name, double amount){
+        submitRecoveryDeposit(name, amount);
+    }
+
+    private void submitDeposit(String name, double amount){
+        String logEntry="DEPOSIT "+name+" "+amount;
+        TransactionProcess process=new TransactionProcess(
+            "TX-"+System.currentTimeMillis(),
+            () ->{
+                logger.log("BEGIN "+logEntry);
+                if(bank.deposit(name, amount)){
+                    logger.log("COMMIT "+logEntry);
+                }
+            },
+            2
+        );
+        submitKernelProcess(process);
+    }
+
+    private void submitRecoveryDeposit(String name, double amount){
+        TransactionProcess process=new TransactionProcess(
+            "REC-"+System.currentTimeMillis(),
+            () -> bank.recoverDeposit(name, amount),
+            2
+        );
+        submitKernelProcess(process);
+    }
+
+    public void withdraw(String name, double amount){
+        user current=Session.getCurrentUser();
+        if(current==null){
+            System.out.println("Access denied: not logged in.");
+            return;
+        }
+        if(!current.isAdmin() && !current.getUsername().equals(name)){
+            System.out.println("Access denied: Cannot withdraw from other accounts.");
+            return;
+        }
+        submitWithdraw(name, amount);
+    }
+
+    public void recoverWithdraw(String name, double amount){
+        submitRecoveryWithdraw(name, amount);
+    }
+
+    private void submitWithdraw(String name, double amount){
+        String logEntry="WITHDRAW "+name+" "+amount;
+        TransactionProcess process=new TransactionProcess(
+            "TX-"+System.currentTimeMillis(),
+            () ->{
+                logger.log("BEGIN "+logEntry);
+                if(bank.withdraw(name, amount)){
+                    logger.log("COMMIT "+logEntry);
+                }
+            },
+            2
+        );
+        submitKernelProcess(process);
+    }
+
+    private void submitRecoveryWithdraw(String name, double amount){
+        TransactionProcess process=new TransactionProcess(
+            "REC-"+System.currentTimeMillis(),
+            () -> bank.recoverWithdraw(name, amount),
+            2
+        );
+        submitKernelProcess(process);
+    }
+
+    private void submitKernelProcess(TransactionProcess process){
+        modeBit.enterKernelMode();
+        try{
+            scheduler.submitProcess(process);
+            scheduler.runPendingProcesses();
+        }
+        finally{
+            modeBit.enterUserMode();
+        }
     }
 
     public void grantTransfer(String username){
@@ -94,7 +278,10 @@ public class TransactionManager{
             System.out.println("User not found.");
             return;
         }
-        target.setTransferPermission(true);
+        if(!authManager.setTransferPermission(username, true)){
+            System.out.println("Permission update failed.");
+            return;
+        }
         System.out.println("Permission granted for user "+username);
     }
 
@@ -110,7 +297,10 @@ public class TransactionManager{
             System.out.println("User not found.");
             return;
         }
-        target.setTransferPermission(false);
+        if(!authManager.setTransferPermission(username, false)){
+            System.out.println("Permission update failed.");
+            return;
+        }
         System.out.println("Transfer permission revoked for user "+username);
     }
 
@@ -163,13 +353,14 @@ public class TransactionManager{
         user u=authManager.login(username, password);
         if(u==null){
             System.out.println("Invalid credentials."); 
+            return;
         }
         
         Session.login(u);
         System.out.println("Login successful. Welcome "+username );
 
     }
-    public void logout(String username, String password){
+    public void logout(){
         if(!Session.isLoggedIn()){
             System.out.println("No user is currently logged in.");
             return;
@@ -198,5 +389,84 @@ public class TransactionManager{
             return;
         }
         bank.checkBalance(name);
+    }
+
+    public void showTransactions(String name){
+        user current=Session.getCurrentUser();
+
+        if(current == null){
+            System.out.println("Access denied: not logged in.");
+            return;
+        }
+
+        if(current.isAdmin()){
+            bank.printTransactionsFor(name);
+            return;
+        }
+
+        if(!current.getUsername().equals(name)){
+            System.out.println("Access denied: not unauthorized access");
+            return;
+        }
+        bank.printTransactionsFor(name);
+    }
+
+    public boolean hasCommittedStorage(){
+        return bank.hasCommittedAccounts();
+    }
+
+    public void createLoan(String type, String borrower, double amount, int durationYears){
+        user current=Session.getCurrentUser();
+
+        if(current==null){
+            System.out.println("Access denied: not logged in.");
+            return;
+        }
+
+        if(!current.isAdmin() && !current.getUsername().equals(borrower)){
+            System.out.println("Access denied: Cannot create loan for other users.");
+            return;
+        }
+
+        if(current.isAdmin() && authManager.getuser(borrower)==null && !bank.hasAccount(borrower)){
+            System.out.println("Borrower not found.");
+            return;
+        }
+
+        loanManager.createLoan(type, borrower, amount, durationYears);
+    }
+
+    public void showLoans(String borrower){
+        user current=Session.getCurrentUser();
+
+        if(current==null){
+            System.out.println("Access denied: not logged in.");
+            return;
+        }
+
+        if(!current.isAdmin() && !current.getUsername().equals(borrower)){
+            System.out.println("Access denied: Cannot view other users' loans.");
+            return;
+        }
+
+        loanManager.printLoansFor(borrower);
+    }
+
+    public void showLoanRates(){
+        loanManager.printRates();
+    }
+
+    public void updateLoansNow(){
+        user current=Session.getCurrentUser();
+
+        if(current==null || !current.isAdmin()){
+            System.out.println("Access denied: Only admins can run loan updates manually.");
+            return;
+        }
+        loanManager.updateAccruedInterest(true);
+    }
+
+    public void shutdown(){
+        loanManager.shutdown();
     }
 }

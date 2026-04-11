@@ -9,11 +9,6 @@ public class RoundRobinQueue {
         queue.add(p);
     }
     public synchronized TransactionProcess getNext(){
-        TransactionProcess p=queue.poll();
-        if(p!=null){
-            queue.add(p);
-
-        }
-        return p;
+        return queue.poll();
     }
 }
