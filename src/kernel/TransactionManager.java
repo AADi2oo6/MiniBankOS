@@ -9,6 +9,11 @@ import Auth.AuthManager;
 import Auth.Session;
 import Auth.user;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 public class TransactionManager{
     private BankDatabase bank;
     private Logger logger;
@@ -16,7 +21,16 @@ public class TransactionManager{
     private AuthManager authManager;
     private ModeBit modeBit;
     private LoanManager loanManager;
+    private BankersAlgorithm bankersAlgorithm;
 
+    // SLOW MODE: holds resources for 5s after Banker's approval so concurrent
+    // clients can see blocking live (for server demo)
+    private volatile boolean slowMode = false;
+
+    public void setSlowMode(boolean on) {
+        this.slowMode = on;
+        System.out.println("  [SLOW-MODE] " + (on ? "ON  -- transfers will hold locks for 5s (demo mode)" : "OFF -- normal speed"));
+    }
 
     public TransactionManager(BankDatabase bank, Scheduler scheduler, AuthManager authManager, ModeBit modeBit){
         this.bank=bank;
@@ -26,6 +40,7 @@ public class TransactionManager{
         this.modeBit=modeBit;
         this.loanManager=new LoanManager();
         this.loanManager.startRealtimeUpdates();
+        this.bankersAlgorithm=new BankersAlgorithm();
     }
     public void createAccount(String name, double balance){
         user current=Session.getCurrentUser();
@@ -106,6 +121,9 @@ public class TransactionManager{
         2//priority
     );
         submitKernelProcess(process);
+        if(success[0]){
+            bankersAlgorithm.registerResource(name); // register as resource
+        }
         return success[0];
     }
 
@@ -151,10 +169,24 @@ public class TransactionManager{
 
     private void submitTransfer(String from, String to, double amount){
         String logEntry="TRANSFER "+from+" "+to+" "+amount;
+        String processId="TX-"+System.currentTimeMillis();
+
+        // Banker's Algorithm: check safe state before granting account locks
+        Set<String> needed=new HashSet<>(Arrays.asList(from, to));
+        if(!bankersAlgorithm.requestAndCheck(processId, needed)){
+            System.out.println("Transfer blocked by Banker's Algorithm (unsafe state).");
+            return;
+        }
+
         TransactionProcess process=new TransactionProcess(
-            "TX-"+System.currentTimeMillis(),
+            processId,
             () ->{
                 logger.log("BEGIN "+logEntry);
+                // SLOW-MODE: hold resources long enough for concurrent clients to arrive
+                if (slowMode) {
+                    System.out.println("  [SLOW-MODE] Holding [" + from + ", " + to + "] for 5s...");
+                    try { Thread.sleep(5000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                }
                 if(bank.transfer(from, to, amount)){
                     logger.log("COMMIT "+logEntry);
                 }
@@ -162,6 +194,9 @@ public class TransactionManager{
             1//higher priority
         );
         submitKernelProcess(process);
+
+        // Release accounts after transfer completes
+        bankersAlgorithm.release(processId);
     }
 
     private void submitRecoveryTransfer(String from, String to, double amount){
@@ -468,5 +503,117 @@ public class TransactionManager{
 
     public void shutdown(){
         loanManager.shutdown();
+    }
+
+    // =========================================================================
+    // DEADLOCK DEMO -- 3 REAL concurrent threads, real bank.transfer() calls
+    // =========================================================================
+    public void runDeadlockDemo(String acc1, String acc2, String acc3) {
+        // Register the 3 accounts as resources in the REAL bankersAlgorithm
+        bankersAlgorithm.registerResource(acc1);
+        bankersAlgorithm.registerResource(acc2);
+        bankersAlgorithm.registerResource(acc3);
+
+        // Different amounts so net balances visibly change after demo
+        double amt1 = 500.0; // T1: acc1 --> acc2  (large)
+        double amt2 = 200.0; // T2: acc2 --> acc3  (medium)
+        double amt3 = 100.0; // T3: acc3 --> acc1  (small)
+        // Net: acc1 loses 400, acc2 gains 300, acc3 gains 100
+
+        System.out.println();
+        System.out.println("  ============================================================");
+        System.out.println("       DEADLOCK DEMO -- 3 Real Concurrent Transfers");
+        System.out.println("  ============================================================");
+        System.out.println("  T1: " + acc1 + " --> " + acc2 + "  sends " + amt1);
+        System.out.println("  T2: " + acc2 + " --> " + acc3 + "  sends " + amt2);
+        System.out.println("  T3: " + acc3 + " --> " + acc1 + "  sends " + amt3);
+        System.out.println("  All 3 starting simultaneously. Banker's decides who runs first.");
+        System.out.println();
+
+        String t1id = "T1[" + acc1 + "->" + acc2 + "]";
+        String t2id = "T2[" + acc2 + "->" + acc3 + "]";
+        String t3id = "T3[" + acc3 + "->" + acc1 + "]";
+
+        // Thread 1: REAL transfer acc1 --> acc2
+        Thread t1 = new Thread(() -> {
+            try {
+                Set<String> needs = new LinkedHashSet<>(Arrays.asList(acc1, acc2));
+                System.out.println("  " + t1id + " requesting locks [" + acc1 + ", " + acc2 + "]...");
+                while (!bankersAlgorithm.requestAndCheck(t1id, needs)) {
+                    System.out.println("  " + t1id + " waiting... retrying.");
+                    Thread.sleep(300);
+                }
+                // REAL bank.transfer() — balances actually change
+                System.out.println("  " + t1id + " APPROVED. Calling bank.transfer(" + acc1 + ", " + acc2 + ", " + amt1 + ")");
+                bank.transfer(acc1, acc2, amt1);
+                System.out.println("  " + t1id + " DONE. Releasing locks.");
+                bankersAlgorithm.release(t1id);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, "T1-Thread");
+
+        // Thread 2: REAL transfer acc2 --> acc3 (starts 300ms after T1)
+        Thread t2 = new Thread(() -> {
+            try {
+                Thread.sleep(300); // small delay so T1 grabs resources first
+                Set<String> needs = new LinkedHashSet<>(Arrays.asList(acc2, acc3));
+                System.out.println("  " + t2id + " requesting locks [" + acc2 + ", " + acc3 + "]...");
+                System.out.println("  " + t2id + " NOTE: T1 is running and holds [" + acc1 + ", " + acc2 + "]");
+                while (!bankersAlgorithm.requestAndCheck(t2id, needs)) {
+                    System.out.println("  " + t2id + " BLOCKED -- " + acc2 + " held by T1! Retrying...");
+                    Thread.sleep(300);
+                }
+                // REAL bank.transfer()
+                System.out.println("  " + t2id + " APPROVED. Calling bank.transfer(" + acc2 + ", " + acc3 + ", " + amt2 + ")");
+                bank.transfer(acc2, acc3, amt2);
+                System.out.println("  " + t2id + " DONE. Releasing locks.");
+                bankersAlgorithm.release(t2id);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, "T2-Thread");
+
+        // Thread 3: REAL transfer acc3 --> acc1 (starts 600ms after T1)
+        Thread t3 = new Thread(() -> {
+            try {
+                Thread.sleep(600);
+                Set<String> needs = new LinkedHashSet<>(Arrays.asList(acc3, acc1));
+                System.out.println("  " + t3id + " requesting locks [" + acc3 + ", " + acc1 + "]...");
+                while (!bankersAlgorithm.requestAndCheck(t3id, needs)) {
+                    System.out.println("  " + t3id + " BLOCKED -- resources held by others. Retrying...");
+                    Thread.sleep(300);
+                }
+                // REAL bank.transfer()
+                System.out.println("  " + t3id + " APPROVED. Calling bank.transfer(" + acc3 + ", " + acc1 + ", " + amt3 + ")");
+                bank.transfer(acc3, acc1, amt3);
+                System.out.println("  " + t3id + " DONE. Releasing locks.");
+                bankersAlgorithm.release(t3id);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, "T3-Thread");
+
+        // Start all 3 threads simultaneously
+        t1.start();
+        t2.start();
+        t3.start();
+
+        // Wait for all to finish
+        try {
+            t1.join();
+            t2.join();
+            t3.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        System.out.println();
+        System.out.println("  ============================================================");
+        System.out.println("  All 3 REAL transfers completed. ZERO deadlocks.");
+        System.out.println("  Check balances of " + acc1 + ", " + acc2 + ", " + acc3 + " to confirm.");
+        System.out.println("  Banker's Algorithm kept system in SAFE STATE throughout.");
+        System.out.println("  ============================================================");
+        System.out.println();
     }
 }

@@ -1,26 +1,22 @@
 package Auth;
 
 public class Session {
-    private static user currentUser=null;
+    // ThreadLocal: each thread (each client connection) has its OWN session
+    private static final ThreadLocal<user> currentUser = new ThreadLocal<>();
 
-    //Login: set current user
     public static void login(user User){
-        currentUser=User;
+        currentUser.set(User);
     }
 
-
-    //Logout: clearing the session
     public static void logout(){
-        currentUser=null;
+        currentUser.remove();
     }
 
-    //get current user
     public static user getCurrentUser(){
-        return currentUser;
+        return currentUser.get();
     }
 
-    //check if logged in
     public static boolean isLoggedIn(){
-        return currentUser != null;
+        return currentUser.get() != null;
     }
 }

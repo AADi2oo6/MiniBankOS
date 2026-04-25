@@ -95,6 +95,10 @@ public class Terminal {
                 parser.parse(command);
                 System.out.println();
             }
+            catch(java.util.NoSuchElementException e){
+                // stdin closed (e.g. piped input ended) — exit gracefully
+                break;
+            }
             catch(Exception e){
                 e.printStackTrace();
             }

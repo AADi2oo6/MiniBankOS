@@ -1,1 +1,4 @@
 name,balance,state
+alice,3600.0,COMMIT
+bob,4300.0,COMMIT
+charlie,4100.0,COMMIT

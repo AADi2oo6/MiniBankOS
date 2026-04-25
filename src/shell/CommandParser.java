@@ -1,5 +1,6 @@
 package shell;
 
+import java.util.*;
 import kernel.TransactionManager;
 
 public class CommandParser{
@@ -180,6 +181,23 @@ public class CommandParser{
                 return;
             }
             tm.deleteUser(tokens[1]);
+        }
+        else if(tokens[0].equalsIgnoreCase("deadlock-demo")){
+            if(tokens.length == 4){
+                tm.runDeadlockDemo(tokens[1], tokens[2], tokens[3]);
+            } else {
+                System.out.println("Usage: deadlock-demo <account1> <account2> <account3>");
+                System.out.println("Example: deadlock-demo alice bob charlie");
+            }
+        }
+        else if(tokens[0].equalsIgnoreCase("slow-mode")){
+            if(tokens.length==2 && tokens[1].equalsIgnoreCase("on")){
+                tm.setSlowMode(true);
+            } else if(tokens.length==2 && tokens[1].equalsIgnoreCase("off")){
+                tm.setSlowMode(false);
+            } else {
+                System.out.println("Usage: slow-mode on | slow-mode off");
+            }
         }
         else{
             System.out.println(tokens[0]+" is not a valid command.");
