@@ -16,10 +16,12 @@ public class MiniBankController {
 
     private final CommandParser parser;
     private final AuthManager authManager;
+    private final TransactionManager transactionManager;
 
     public MiniBankController(TransactionManager transactionManager, AuthManager authManager) {
         this.parser = new CommandParser(transactionManager);
         this.authManager = authManager;
+        this.transactionManager = transactionManager;
     }
 
     @PostMapping("/execute")
@@ -63,5 +65,35 @@ public class MiniBankController {
     @GetMapping("/users")
     public ResponseEntity<?> getUsers() {
         return ResponseEntity.ok(authManager.getAllUsers());
+    }
+
+    @GetMapping("/accounts/{userId}/balance")
+    public ResponseEntity<?> getBalance(@PathVariable String userId) {
+        Auth.user current = Session.getCurrentUser();
+        if(current == null) return ResponseEntity.status(401).body(Map.of("error", "Not logged in"));
+        Double bal = transactionManager.getBalanceValue(userId);
+        if(bal == null) return ResponseEntity.status(403).body(Map.of("error", "Access denied or not found"));
+        return ResponseEntity.ok(Map.of("balance", bal));
+    }
+
+    @GetMapping("/accounts/{userId}/history")
+    public ResponseEntity<?> getHistory(@PathVariable String userId) {
+        Auth.user current = Session.getCurrentUser();
+        if(current == null) return ResponseEntity.status(401).body(Map.of("error", "Not logged in"));
+        java.util.List<Map<String, String>> txns = transactionManager.getTransactionsList(userId);
+        return ResponseEntity.ok(txns);
+    }
+
+    @GetMapping("/loans/rates")
+    public ResponseEntity<?> getRates() {
+        return ResponseEntity.ok(transactionManager.getRatesData());
+    }
+
+    @GetMapping("/loans/{userId}")
+    public ResponseEntity<?> getLoans(@PathVariable String userId) {
+        Auth.user current = Session.getCurrentUser();
+        if(current == null) return ResponseEntity.status(401).body(Map.of("error", "Not logged in"));
+        java.util.List<Map<String, Object>> loans = transactionManager.getLoansList(userId);
+        return ResponseEntity.ok(loans);
     }
 }

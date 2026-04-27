@@ -13,6 +13,8 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.List;
+import java.util.Map;
 
 public class TransactionManager{
     private BankDatabase bank;
@@ -404,6 +406,15 @@ public class TransactionManager{
         System.out.println("Logout Successfull.");
     }
 
+    public Double getBalanceValue(String name) {
+        user current = Session.getCurrentUser();
+        if(current == null) return null;
+        if(current.isAdmin() || current.getUsername().equals(name)){
+            return bank.getBalanceValue(name);
+        }
+        return null;
+    }
+
     public void checkBalance(String name){
         user current=Session.getCurrentUser();
 
@@ -424,6 +435,15 @@ public class TransactionManager{
             return;
         }
         bank.checkBalance(name);
+    }
+
+    public List<Map<String, String>> getTransactionsList(String name) {
+        user current = Session.getCurrentUser();
+        if(current == null) return new java.util.ArrayList<>();
+        if(current.isAdmin() || current.getUsername().equals(name)){
+            return bank.getTransactionsList(name);
+        }
+        return new java.util.ArrayList<>();
     }
 
     public void showTransactions(String name){
@@ -471,6 +491,15 @@ public class TransactionManager{
         loanManager.createLoan(type, borrower, amount, durationYears);
     }
 
+    public List<Map<String, Object>> getLoansList(String borrower) {
+        user current = Session.getCurrentUser();
+        if(current == null) return new java.util.ArrayList<>();
+        if(current.isAdmin() || current.getUsername().equals(borrower)){
+            return loanManager.getLoansList(borrower);
+        }
+        return new java.util.ArrayList<>();
+    }
+
     public void showLoans(String borrower){
         user current=Session.getCurrentUser();
 
@@ -485,6 +514,10 @@ public class TransactionManager{
         }
 
         loanManager.printLoansFor(borrower);
+    }
+
+    public Map<String, Object> getRatesData() {
+        return loanManager.getRatesData();
     }
 
     public void showLoanRates(){

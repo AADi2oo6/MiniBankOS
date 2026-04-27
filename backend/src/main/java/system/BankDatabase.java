@@ -199,6 +199,20 @@ public class BankDatabase {
 
     // ── Balance ───────────────────────────────────────────────────────────────
 
+    public Double getBalanceValue(String name) {
+        Account acc = getAccount(name); // TLB lookup or page fault
+        if (acc == null) {
+            return null;
+        }
+        ReentrantReadWriteLock lock = lockManager.getLock(name);
+        lock.readLock().lock();
+        try {
+            return acc.getBalance();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public void checkBalance(String name) {
         Account acc = getAccount(name); // TLB lookup or page fault
         if (acc == null) {
@@ -356,6 +370,29 @@ public class BankDatabase {
     }
 
     // ── Transactions ──────────────────────────────────────────────────────────
+
+    public List<Map<String, String>> getTransactionsList(String name) {
+        List<Map<String, String>> result = new ArrayList<>();
+        try {
+            pageTable.ensureFile(PageTable.TRANSACTIONS_FILE, TRANSACTION_HEADER);
+            List<String[]> rows = CsvStorage.readRows(pageTable.getFile("transactions"));
+            for (String[] row : rows) {
+                if (row.length < 6 || !row[5].equalsIgnoreCase("COMMIT")) continue;
+                if (row[2].equals(name) || row[3].equals(name)) {
+                    Map<String, String> txn = new LinkedHashMap<>();
+                    txn.put("timestamp", row[0]);
+                    txn.put("type", row[1]);
+                    txn.put("from", row[2]);
+                    txn.put("to", row[3]);
+                    txn.put("amount", row[4]);
+                    result.add(txn);
+                }
+            }
+        } catch (IOException e) {
+            return result;
+        }
+        return result;
+    }
 
     public void printTransactionsFor(String name) {
         boolean found = false;

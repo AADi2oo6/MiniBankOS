@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -113,11 +114,48 @@ public class LoanManager {
         }
     }
 
+    public List<Map<String, Object>> getLoansList(String borrower) {
+        updateAccruedInterest(false);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for(String type : new String[]{EDUCATION, HOUSE, BUSINESS}){
+            try{
+                List<LoanRecord> loans = readLoans(type);
+                for(LoanRecord loan : loans){
+                    if(!loan.borrower.equals(borrower) || !loan.state.equalsIgnoreCase("COMMIT")){
+                        continue;
+                    }
+                    Map<String, Object> map = new java.util.LinkedHashMap<>();
+                    map.put("category", type);
+                    map.put("id", loan.id);
+                    map.put("principal", loan.currentPrincipal);
+                    map.put("originalAmount", loan.loanAmount);
+                    map.put("durationYears", loan.durationYears);
+                    map.put("remainingMonths", loan.remainingMonths);
+                    map.put("yearlyInterest", loan.annualInterestRate);
+                    map.put("status", loan.status);
+                    result.add(map);
+                }
+            }
+            catch(IOException e){
+                // ignore
+            }
+        }
+        return result;
+    }
+
     public void printRates(){
         System.out.println("Education loan yearly interest: "+EDUCATION_INTEREST+"%");
         System.out.println("House loan yearly interest: "+HOUSE_INTEREST+"%");
         System.out.println("Business loan yearly interest: "+BUSINESS_INTEREST+"%");
         System.out.println("One real-time update happens every 5 minutes and represents 1 banking month.");
+    }
+
+    public Map<String, Object> getRatesData() {
+        Map<String, Object> rates = new java.util.LinkedHashMap<>();
+        rates.put(EDUCATION, EDUCATION_INTEREST);
+        rates.put(HOUSE, HOUSE_INTEREST);
+        rates.put(BUSINESS, BUSINESS_INTEREST);
+        return rates;
     }
 
     public synchronized void updateAccruedInterest(boolean showMessage){
