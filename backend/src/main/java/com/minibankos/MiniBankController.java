@@ -59,4 +59,9 @@ public class MiniBankController {
         parser.parse(command);
         return ResponseEntity.ok(Map.of("status", "success", "command", command));
     }
+
+    @GetMapping("/users")
+    public ResponseEntity<?> getUsers() {
+        return ResponseEntity.ok(authManager.getAllUsers());
+    }
 }

@@ -42,4 +42,7 @@ public class user {
     public boolean isAdmin(){
         return (role == Role.ADMIN);
     }
+    public boolean isTransferPermission() {
+        return canTransfer;
+    }
 }

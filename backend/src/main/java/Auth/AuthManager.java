@@ -58,6 +58,11 @@ public class AuthManager {
         return (users.containsKey(username))?users.get(username):null;
     }
 
+    //get all users (admin ops of seeing roster and permissions)
+    public List<user> getAllUsers(){
+        return new ArrayList<>(users.values());
+    }
+
     public boolean setTransferPermission(String username, boolean canTransfer){
         user target=users.get(username);
         if(target==null){

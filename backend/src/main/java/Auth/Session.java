@@ -1,22 +1,22 @@
 package Auth;
 
 public class Session {
-    // ThreadLocal: each thread (each client connection) has its OWN session
-    private static final ThreadLocal<user> currentUser = new ThreadLocal<>();
+    // Static memory: keeps the user consistently logged in across all REST API requests
+    private static user currentUser = null;
 
     public static void login(user User){
-        currentUser.set(User);
+        currentUser = User;
     }
 
     public static void logout(){
-        currentUser.remove();
+        currentUser = null;
     }
 
     public static user getCurrentUser(){
-        return currentUser.get();
+        return currentUser;
     }
 
     public static boolean isLoggedIn(){
-        return currentUser.get() != null;
+        return currentUser != null;
     }
 }

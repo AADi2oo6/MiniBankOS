@@ -1,2 +1,3 @@
 username,password,role,canTransfer,state
 root,root123,ADMIN,false,COMMIT
+ADITYA,202510,USER,true,COMMIT
