@@ -190,6 +190,9 @@ public class CommandParser{
                 System.out.println("Example: deadlock-demo alice bob charlie");
             }
         }
+        else if(tokens[0].equalsIgnoreCase("reset-banker")){
+            tm.resetBanker();
+        }
         else if(tokens[0].equalsIgnoreCase("slow-mode")){
             if(tokens.length==2 && tokens[1].equalsIgnoreCase("on")){
                 tm.setSlowMode(true);

@@ -1,6 +1,6 @@
 package kernel.scheduler;
 
-
+import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -8,7 +8,7 @@ public class PriorityScheduler {
     private TreeMap<Integer, RoundRobinQueue> priorityQueue;
 
     public PriorityScheduler(){
-        priorityQueue=new TreeMap<>();
+        priorityQueue=new TreeMap<>(Collections.reverseOrder());
     }
 
     public synchronized void addProcess(TransactionProcess process){
@@ -31,5 +31,12 @@ public class PriorityScheduler {
             }
         }
         return null;
+    }
+
+    public synchronized boolean hasProcesses() {
+        for(RoundRobinQueue queue : priorityQueue.values()){
+            if(!queue.isEmpty()) return true;
+        }
+        return false;
     }
 }

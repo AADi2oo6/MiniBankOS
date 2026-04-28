@@ -96,4 +96,39 @@ public class MiniBankController {
         java.util.List<Map<String, Object>> loans = transactionManager.getLoansList(userId);
         return ResponseEntity.ok(loans);
     }
+    
+    @PostMapping("/os/simulate")
+    public ResponseEntity<?> simulateScheduler(@RequestBody Map<String, Object> payload) {
+        kernel.scheduler.Scheduler simulator = new kernel.scheduler.Scheduler();
+        
+        long quantum = Long.parseLong(payload.getOrDefault("quantum", "3").toString());
+        java.util.List<Map<String, Object>> processesPayload = (java.util.List<Map<String, Object>>) payload.get("processes");
+        
+        int pidCounter = 1;
+        if(processesPayload != null) {
+            for (Map<String, Object> p : processesPayload) {
+                String name = (String) p.getOrDefault("type", "Unknown");
+                int priority = Integer.parseInt(p.getOrDefault("priority", "1").toString());
+                long burst = Long.parseLong(p.getOrDefault("burst", "1").toString());
+                long arrival = Long.parseLong(p.getOrDefault("arrival", "0").toString());
+                
+                kernel.scheduler.TransactionProcess tp = new kernel.scheduler.TransactionProcess(
+                    "P" + (pidCounter++), 
+                    () -> {}, // Simulated blank runtime execution 
+                    priority, 
+                    name, 
+                    burst
+                );
+                tp.setArrivalTime(arrival);
+                simulator.submitProcess(tp);
+            }
+        }
+        
+        simulator.runPendingProcesses(quantum);
+        
+        return ResponseEntity.ok(Map.of(
+            "metrics", simulator.getHistory(),
+            "gantt", simulator.getGanttSlices()
+        ));
+    }
 }

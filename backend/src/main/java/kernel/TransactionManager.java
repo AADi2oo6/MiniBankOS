@@ -195,10 +195,21 @@ public class TransactionManager{
             },
             1//higher priority
         );
-        submitKernelProcess(process);
+        try {
+            submitKernelProcess(process);
+        } finally {
+            // Release accounts after transfer completes (even if scheduler fails)
+            bankersAlgorithm.release(processId);
+        }
+    }
 
-        // Release accounts after transfer completes
-        bankersAlgorithm.release(processId);
+    public void resetBanker() {
+        modeBit.enterKernelMode();
+        try {
+            bankersAlgorithm.clearState();
+        } finally {
+            modeBit.enterUserMode();
+        }
     }
 
     private void submitRecoveryTransfer(String from, String to, double amount){
@@ -296,7 +307,7 @@ public class TransactionManager{
         modeBit.enterKernelMode();
         try{
             scheduler.submitProcess(process);
-            scheduler.runPendingProcesses();
+            scheduler.runPendingProcesses(5); // Default quantum for internal bank transactions
         }
         finally{
             modeBit.enterUserMode();

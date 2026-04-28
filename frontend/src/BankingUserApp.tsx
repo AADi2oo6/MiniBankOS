@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useBankStore } from './store';
-import { Send, DollarSign, ArrowRightLeft, User, LogOut, Loader2, ShieldCheck, UserPlus, Key, Zap, List, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import { Send, DollarSign, ArrowRightLeft, User, LogOut, Loader2, ShieldCheck, UserPlus, Key, Zap, List, RefreshCw, CheckCircle, XCircle, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const BankingUserApp: React.FC = () => {
@@ -28,6 +28,16 @@ const BankingUserApp: React.FC = () => {
   // Loan State
   const [loanRates, setLoanRates] = useState<any>({});
   const [loans, setLoans] = useState<any[]>([]);
+
+  // Simulator State
+  const [simProcesses, setSimProcesses] = useState<any[]>([]);
+  const [simType, setSimType] = useState('deposit');
+  const [simPriority, setSimPriority] = useState('1');
+  const [simBurst, setSimBurst] = useState('3');
+  const [simArrival, setSimArrival] = useState('0');
+  const [simQuantum, setSimQuantum] = useState('3');
+  const [simMetrics, setSimMetrics] = useState<any[]>([]);
+  const [simGantt, setSimGantt] = useState<any[]>([]);
 
   // Toast notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -192,7 +202,7 @@ const BankingUserApp: React.FC = () => {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 p-6 flex flex-col items-center justify-start md:justify-center relative overflow-hidden overflow-y-auto">
+      <div className="flex-1 p-6 flex flex-col items-center justify-start relative overflow-x-hidden overflow-y-auto pb-24">
         
         {/* Background Decoration */}
         <div className="absolute top-[20%] left-[10%] w-64 h-64 bg-blue-600 rounded-full mix-blend-screen filter blur-[100px] opacity-20 pointer-events-none"></div>
@@ -256,11 +266,219 @@ const BankingUserApp: React.FC = () => {
                   <h3 className="font-bold text-xl text-slate-100">Manage Permissions</h3>
                   <p className="text-sm text-slate-400 text-center">Grant/Revoke transfer privileges</p>
                 </div>
-                <div onClick={() => setFormType('admin-os')} className="glass-panel cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all p-8 rounded-2xl flex flex-col items-center justify-center space-y-4 md:col-span-2 bg-gradient-to-r from-red-900 to-rose-900 text-white border-none shadow-red-900/20">
+                <div onClick={() => setFormType('admin-os')} className="glass-panel cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all p-8 rounded-2xl flex flex-col items-center justify-center space-y-4 bg-gradient-to-r from-red-900 to-rose-900 text-white border-none shadow-red-900/20">
                   <div className="p-4 bg-white/10 rounded-full"><Zap size={32}/></div>
                   <h3 className="font-bold text-2xl">OS Presentation Controls</h3>
                   <p className="text-sm text-red-200 text-center">Force Deadlock Arrays & Slow Mode settings</p>
                 </div>
+                <div onClick={() => setFormType('admin-scheduler')} className="glass-panel cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all p-8 rounded-2xl flex flex-col items-center justify-center space-y-4 md:col-span-2 bg-gradient-to-r from-indigo-900 to-blue-900 text-white border-none shadow-blue-900/20">
+                  <div className="p-4 bg-white/10 rounded-full"><Activity size={32}/></div>
+                  <h3 className="font-bold text-2xl">OS Visualizer</h3>
+                  <p className="text-sm text-blue-200 text-center">Simulate Round Robin + Priority Workloads</p>
+                </div>
+             </motion.div>
+          )}
+
+           {/* OS SCHEDULER SIMULATOR VIEW */}
+           {formType === 'admin-scheduler' && currentUser === 'root' && (
+             <motion.div 
+               key="admin-scheduler"
+               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+               className="w-full max-w-5xl relative z-10 space-y-6"
+             >
+                <div className="flex justify-between items-center bg-slate-900/80 p-4 rounded-xl border border-slate-700">
+                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500 flex items-center gap-2">
+                        <Activity /> Interactive CPU Scheduler Simulator
+                    </h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Process Builder */}
+                    <div className="glass-panel p-6 rounded-2xl bg-slate-900/80 border-slate-700">
+                        <h3 className="text-lg font-bold mb-4 border-b border-slate-700 pb-2">1. Add Process</h3>
+                        <div className="space-y-4">
+                            <div><label className={labelStyle}>Task Type</label>
+                                <select value={simType} onChange={e=>setSimType(e.target.value)} className={inputStyle}>
+                                    <option value="deposit">Deposit</option>
+                                    <option value="withdraw">Withdraw</option>
+                                    <option value="transfer">Transfer</option>
+                                    <option value="balance">Check Balance</option>
+                                    <option value="loan">Apply Loan</option>
+                                </select>
+                            </div>
+                            <div><label className={labelStyle}>Priority (Higher = run first)</label>
+                                <input value={simPriority} onChange={e=>setSimPriority(e.target.value)} type="number" min="1" max="10" className={inputStyle}/>
+                            </div>
+                            <div><label className={labelStyle}>Burst Time (CPU Cycles)</label>
+                                <input value={simBurst} onChange={e=>setSimBurst(e.target.value)} type="number" min="1" max="50" className={inputStyle}/>
+                            </div>
+                            <div><label className={labelStyle}>Arrival Time (cs)</label>
+                                <input value={simArrival} onChange={e=>setSimArrival(e.target.value)} type="number" min="0" max="200" className={inputStyle}/>
+                            </div>
+                            <button onClick={() => {
+                                setSimProcesses([...simProcesses, { type: simType, priority: parseInt(simPriority), burst: parseInt(simBurst), arrival: parseInt(simArrival) }]);
+                                showToast("Process appended to queue!", "success");
+                            }} className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold flex items-center justify-center p-2 rounded-lg transition">+ Create Process Task</button>
+                        </div>
+                    </div>
+
+                    {/* Pending Queue */}
+                    <div className="md:col-span-2 glass-panel p-6 rounded-2xl bg-slate-900/80 border-slate-700 flex flex-col">
+                        <h3 className="text-lg font-bold mb-4 border-b border-slate-700 pb-2 flex justify-between items-center">
+                            <span className="flex items-center gap-3">
+                               2. Ready Queue ({simProcesses.length} tasks)
+                               <div className="flex items-center gap-2 text-xs bg-slate-800 px-2 py-1 rounded border border-slate-600">
+                                   <label className="text-slate-400">Quantum:</label>
+                                   <input title="Time Slice" value={simQuantum} onChange={e=>setSimQuantum(e.target.value)} type="number" min="1" max="20" className="bg-slate-900 border border-slate-700 w-12 text-center rounded text-white"/>
+                               </div>
+                            </span>
+                            <button onClick={() => setSimProcesses([])} className="text-sm font-semibold bg-red-900/30 text-red-400 hover:bg-red-900/60 px-3 py-1 rounded transition">Clear All</button>
+                        </h3>
+                        <div className="overflow-y-auto h-[250px] min-h-[150px] max-h-[600px] resize-y space-y-2 mb-4 scrollbar-thin scrollbar-thumb-slate-700 pr-2 border border-slate-800 rounded-lg p-2 bg-slate-900/50 block w-full">
+                           {simProcesses.map((p, i) => (
+                               <div key={i} className="flex justify-between items-center p-3 bg-slate-800 rounded-lg border border-slate-700 shadow-sm">
+                                   <div className="font-semibold text-slate-200">Process {i+1} : <span className="text-indigo-400 uppercase text-xs ml-2 tracking-wider">{p.type}</span></div>
+                                   <div className="flex gap-4 text-sm">
+                                      <div className="flex items-center gap-1"><span className="text-slate-500 text-xs">Priority: </span><span className="bg-amber-900/40 text-amber-400 px-2 rounded-md font-bold">{p.priority}</span></div>
+                                      <div className="flex items-center gap-1"><span className="text-slate-500 text-xs">Burst: </span><span className="bg-red-900/40 text-red-400 px-2 rounded-md font-bold">{p.burst}cs</span></div>
+                                      <div className="flex items-center gap-1"><span className="text-slate-500 text-xs">Arrival: </span><span className="bg-slate-700 text-slate-300 px-2 rounded-md font-bold">{p.arrival}cs</span></div>
+                                   </div>
+                               </div>
+                           ))}
+                           {simProcesses.length === 0 && <div className="text-slate-500 h-full flex items-center justify-center italic text-sm py-10 opacity-70">Construct and assign custom processes from the left panel to build your load test...</div>}
+                        </div>
+                        <button disabled={simProcesses.length === 0 || loading} onClick={async () => {
+                            setLoading(true);
+                            try {
+                                const res = await fetch('http://localhost:8080/api/os/simulate', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({ quantum: parseInt(simQuantum), processes: simProcesses })
+                                });
+                                const result = await res.json();
+                                setSimMetrics(result.metrics);
+                                setSimGantt(result.gantt);
+                                showToast("Round Robin Execution Timeline Generated!");
+                            } catch(e) { showToast("Failed to run Java VM bounds", "error"); }
+                            finally { setLoading(false); }
+                        }} className="w-full mt-auto bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-3.5 rounded-lg shadow-xl shadow-cyan-900/20 transition-all flex justify-center items-center">
+                            {loading ? <Loader2 className="animate-spin mr-2"/> : <Zap className="mr-2" />} 
+                            {loading ? "Processing Kernel Computations..." : "Execute Priority Scheduler Simulation"}
+                        </button>
+                    </div>
+                </div>
+
+                {loading && (
+                    <div className="glass-panel p-12 rounded-2xl bg-slate-900/80 border-slate-700 flex flex-col items-center justify-center min-h-[300px] shadow-2xl animate-in fade-in">
+                        <Loader2 className="animate-spin text-cyan-500 mb-4" size={48} />
+                        <h3 className="text-xl font-bold text-slate-200">Executing Kernel Scheduler...</h3>
+                        <p className="text-slate-500 mt-2">Computing Context Switches across {simProcesses.length} processes</p>
+                    </div>
+                )}
+
+                {!loading && simMetrics.length > 0 && (
+                    <div className="glass-panel p-6 rounded-2xl bg-slate-900/80 border-slate-700 animate-in fade-in slide-in-from-bottom-4 shadow-2xl">
+                        <h3 className="text-xl font-bold mb-6 border-b border-slate-700 pb-3 text-indigo-300 flex justify-between items-center">
+                           <span>3. Executed Run Telemetry Analytics</span>
+                           <span className="text-xs bg-indigo-900/50 text-indigo-200 px-2 py-1 rounded font-normal tracking-wide">Q={simQuantum} Time Slice Unit</span>
+                        </h3>
+                        
+                        {/* Analytics Banner */}
+                        <div className="grid grid-cols-2 gap-6 mb-8">
+                           <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 text-center shadow-inner relative overflow-hidden">
+                              <div className="absolute top-0 right-0 w-16 h-16 bg-yellow-500/10 blur-[30px]"></div>
+                              <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Average Wait Time (WT)</div>
+                              <div className="text-4xl font-black text-yellow-300">{(simMetrics.reduce((acc, p) => acc + p.waitingTime, 0) / simMetrics.length).toFixed(2)}<span className="text-sm text-yellow-600 ml-1">cycles</span></div>
+                           </div>
+                           <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 text-center shadow-inner relative overflow-hidden">
+                              <div className="absolute top-0 left-0 w-16 h-16 bg-emerald-500/10 blur-[30px]"></div>
+                              <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Average Turnaround Time (TAT)</div>
+                              <div className="text-4xl font-black text-emerald-400">{(simMetrics.reduce((acc, p) => acc + p.turnAroundTime, 0) / simMetrics.length).toFixed(2)}<span className="text-sm text-emerald-700 ml-1">cycles</span></div>
+                           </div>
+                        </div>
+
+                        {/* Telemetry Grid */}
+                        <div className="overflow-hidden rounded-xl border border-slate-800 mb-8">
+                        <table className="w-full text-left text-sm">
+                             <thead>
+                                <tr className="text-slate-400 border-b border-slate-800 bg-slate-950/80">
+                                   <th className="px-5 py-4 font-semibold uppercase">PID</th>
+                                   <th className="px-5 py-4 font-semibold uppercase">Type</th>
+                                   <th className="px-5 py-4 font-semibold uppercase text-amber-300">Priority</th>
+                                   <th className="px-5 py-4 font-semibold uppercase text-red-300">Burst (BT)</th>
+                                   <th className="px-5 py-4 font-semibold uppercase text-slate-500">Arrival</th>
+                                   <th className="px-5 py-4 font-semibold uppercase text-slate-500">Finish</th>
+                                   <th className="px-5 py-4 font-semibold text-right uppercase text-yellow-300">Wait (WT)</th>
+                                   <th className="px-5 py-4 font-semibold text-right uppercase text-emerald-300">Turnaround (TAT)</th>
+                                </tr>
+                             </thead>
+                             <tbody className="divide-y divide-slate-800/60 bg-slate-900/30">
+                                {simMetrics.map((p, idx) => (
+                                    <tr key={idx} className="hover:bg-slate-800/80 transition-colors">
+                                       <td className="px-5 py-3.5 font-bold text-white">{p.processId}</td>
+                                       <td className="px-5 py-3.5"><span className="bg-slate-800 px-2 py-1 rounded text-slate-300 uppercase text-[10px] tracking-wider font-bold">{p.name}</span></td>
+                                       <td className="px-5 py-3.5"><span className="text-amber-400 font-bold bg-amber-900/20 px-2 py-0.5 rounded">{p.priority}</span></td>
+                                       <td className="px-5 py-3.5 font-bold text-red-300">{p.burstTime}</td>
+                                       <td className="px-5 py-3.5 text-slate-500 font-mono">{p.arrivalTime}</td>
+                                       <td className="px-5 py-3.5 text-slate-500 font-mono">{p.completionTime}</td>
+                                       <td className="px-5 py-3.5 font-bold text-yellow-400 text-right font-mono">{p.waitingTime}</td>
+                                       <td className="px-5 py-3.5 font-bold text-emerald-400 text-right font-mono">{p.turnAroundTime}</td>
+                                    </tr>
+                                ))}
+                             </tbody>
+                        </table>
+                        </div>
+                        
+                        {/* Gantt Chart (Chronological representation) */}
+                        <div className="mt-8 relative">
+                           <h3 className="text-sm font-bold mb-4 tracking-widest uppercase text-emerald-400 flex items-center"><Activity size={16} className="mr-2"/> Virtual Process Gantt Chart</h3>
+                           <div className="flex w-full bg-slate-950 rounded-xl p-2.5 overflow-x-auto border border-slate-800 shadow-inner min-h-[90px] items-center gap-1">
+                                {(() => {
+                                    const chronological = [...simGantt].sort((a,b) => a.startTime - b.startTime);
+                                    
+                                    return chronological.map((slice, i) => {
+                                        let gap = 0;
+                                        if (i > 0) {
+                                            gap = slice.startTime - chronological[i-1].endTime;
+                                        } else if (slice.startTime > 0) {
+                                            gap = slice.startTime;
+                                        }
+
+                                        return (
+                                            <React.Fragment key={`slice-${i}`}>
+                                                {gap > 0 && (
+                                                    <div style={{flex: gap}} className="flex flex-col items-center justify-center bg-slate-900 border-r border-slate-800 h-[60px] min-w-[20px] rounded-sm shadow-inner opacity-50 relative group">
+                                                        <span className="text-[10px] text-slate-500 uppercase tracking-widest rotate-90 md:rotate-0">Idle</span>
+                                                        <div className="absolute -top-10 z-20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 border border-slate-600 text-xs px-2 py-1 rounded whitespace-nowrap shadow-xl">
+                                                            <span className="text-slate-400 font-bold">Idle: {gap}cs</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <motion.div 
+                                                  initial={{ scaleX: 0, opacity: 0 }} 
+                                                  animate={{ scaleX: 1, opacity: 1 }} 
+                                                  transition={{ delay: i * 0.05, duration: 0.3 }}
+                                                  title={`Process: ${slice.processId} | Start: ${slice.startTime} | End: ${slice.endTime}`} 
+                                                  style={{flex: Math.max(slice.runTime, 1)}} 
+                                                  className="group relative flex flex-col items-center justify-center bg-gradient-to-b from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 border-r border-emerald-950 border-opacity-50 h-[60px] min-w-[40px] rounded-md transition-all cursor-pointer shadow-lg transform origin-left"
+                                                >
+                                                     <span className="font-extrabold text-white text-sm z-10 drop-shadow-md">{slice.processId}</span>
+                                                     <span className="text-[9px] text-emerald-200 font-bold z-10 bg-emerald-950/50 px-1.5 rounded-sm mt-0.5">{slice.runTime}cs</span>
+                                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-white/0 group-hover:bg-white/10 transition"></div>
+                                                     
+                                                     <div className="absolute -top-12 z-20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 border border-slate-600 text-xs px-3 py-1.5 rounded whitespace-nowrap shadow-xl flex flex-col">
+                                                        <span className="text-white font-bold mb-1">Time: {slice.startTime}cs - {slice.endTime}cs</span>
+                                                        <span className="text-amber-300 font-bold min-w-max">Priority: {slice.priority}</span>
+                                                     </div>
+                                                </motion.div>
+                                            </React.Fragment>
+                                        );
+                                    });
+                                })()}
+                           </div>
+                        </div>
+                    </div>
+                )}
              </motion.div>
           )}
 

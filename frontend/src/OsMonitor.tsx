@@ -4,7 +4,7 @@ import { TerminalSquare, Cpu, MemoryStick, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const OsMonitor: React.FC = () => {
-  const { osLogs } = useBankStore();
+  const { osLogs, clearLogs } = useBankStore();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,9 +21,17 @@ const OsMonitor: React.FC = () => {
         <Cpu size={200} />
       </div>
 
-      <div className="flex items-center space-x-2 mb-6 border-b border-slate-800 pb-2 z-10">
-        <TerminalSquare className="text-primary" />
-        <h2 className="text-xl font-bold tracking-widest text-primary">KERNEL MONITOR</h2>
+      <div className="flex items-center justify-between mb-6 border-b border-slate-800 pb-2 z-10">
+        <div className="flex items-center space-x-2">
+          <TerminalSquare className="text-primary" />
+          <h2 className="text-xl font-bold tracking-widest text-primary">KERNEL MONITOR</h2>
+        </div>
+        <button 
+          onClick={clearLogs} 
+          className="text-[10px] uppercase font-bold tracking-tighter bg-slate-800 hover:bg-slate-700 text-slate-400 px-2 py-1 rounded border border-slate-700 transition"
+        >
+          Clear Logs
+        </button>
       </div>
 
       {/* Visual OS Stats Area */}

@@ -122,6 +122,16 @@ public class BankersAlgorithm {
         }
     }
 
+    /**
+     * Emergency reset: clears all current allocations and max claims.
+     * Useful if a process crashed mid-way and never released its locks.
+     */
+    public synchronized void clearState() {
+        allocation.clear();
+        maxClaim.clear();
+        System.out.println("  [BANKER'S] Emergency State Clear: All resource locks released.");
+    }
+
     // Print header for safety check output
     private void printHeader(String processId, Set<String> needed) {
         System.out.println();

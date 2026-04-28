@@ -1,0 +1,585 @@
+# MiniBankOS — Presentation Guide (5 Members)
+
+> Run this before ANY demo:
+> ```powershell
+> Remove-Item src\data\*.csv -Force
+> Remove-Item src\data\*.log -Force -ErrorAction SilentlyContinue
+> java -cp out Main
+> ```
+> Then in the app: `login root root123`
+
+---
+
+---
+
+# MEMBER 1 — Synchronization (Reader-Writer + Critical Section)
+
+---
+
+## What to Say to Mam
+
+> "In an OS, multiple processes may access shared memory simultaneously.
+> Without synchronization, two threads writing at the same time corrupt data.
+>
+> Our project implements the **Reader-Writer Problem**:
+> Multiple users can CHECK balance at the same time (shared read).
+> But only ONE user can DEPOSIT or WITHDRAW at a time (exclusive write).
+>
+> We use Java's ReentrantReadWriteLock — one lock per bank account.
+> Each account is a **critical section** — code that only one thread enters at a time.
+> This matches exactly what OS theory defines as the critical section problem."
+
+---
+
+## Code to Show
+
+**File: `src/kernel/ReadWriteManager.java`**
+```java
+// One lock per account = one lock per shared resource
+private ConcurrentHashMap<String, ReentrantReadWriteLock> locks
+    = new ConcurrentHashMap<>();
+
+public ReentrantReadWriteLock getLock(String accountName) {
+    locks.putIfAbsent(accountName, new ReentrantReadWriteLock());
+    return locks.get(accountName);
+}
+```
+
+**File: `src/system/BankDatabase.java` — Read Lock (balance)**
+```java
+// READER: multiple threads can read balance simultaneously
+lock.readLock().lock();
+try {
+    System.out.println("Balance = " + acc.getBalance()); // shared access OK
+} finally {
+    lock.readLock().unlock();
+}
+```
+
+**File: `src/system/BankDatabase.java` — Write Lock (deposit/withdraw)**
+```java
+// WRITER: only ONE thread can deposit at a time (critical section)
+lock.writeLock().lock();
+try {
+    account.deposit(amount);       // exclusive access
+    persistAccount(account);
+} finally {
+    lock.writeLock().unlock();
+}
+```
+
+**Explain the two rules:**
+```
+Read Lock  → multiple threads can hold simultaneously (shared)
+Write Lock → only ONE thread holds, all others WAIT (exclusive = critical section)
+
+This solves:
+  Mutual Exclusion  (only one writer at a time) ✅
+  Progress          (lock is always released)   ✅
+  Bounded Waiting   (Java's fair lock option)   ✅
+```
+
+---
+
+## Demo Commands
+
+```
+create alice alice123 5000
+create bob bob123 3000
+```
+```
+balance alice
+```
+Say: "balance uses READ lock — multiple users can check simultaneously"
+
+```
+grant alice
+logout
+login alice alice123
+deposit alice 1000
+```
+Say: "deposit uses WRITE lock — only alice's thread enters critical section. If bob also deposits simultaneously, bob's thread WAITS outside until alice finishes."
+
+```
+balance alice
+```
+Say: "New balance is 6000 — data is consistent, no corruption, synchronization worked."
+
+---
+
+---
+
+# MEMBER 2 — Scheduling (Round Robin + Priority)
+
+---
+
+## What to Say to Mam
+
+> "An OS scheduler decides WHICH process runs NEXT and for HOW LONG.
+>
+> Our project implements TWO scheduling algorithms simultaneously:
+>
+> Round Robin: Each transaction gets a fixed time slice (quantum = 3 units).
+> After its time is up, it goes back to the queue. Fair for all.
+>
+> Priority Scheduling: High priority transactions (transfers) run before
+> low priority ones (balance checks). If a high priority job arrives,
+> it runs next regardless of queue order.
+>
+> Every banking operation (deposit, withdraw, transfer) becomes a
+> TransactionProcess — with a process ID, priority, and task.
+> The scheduler manages these exactly like an OS manages PCBs."
+
+---
+
+## Code to Show
+
+**File: `src/kernel/scheduler/TransactionProcess.java`**
+```java
+// Each operation becomes a process (like PCB in OS)
+public class TransactionProcess {
+    private String processId;    // unique process ID
+    private Runnable task;       // what the process does
+    private int priority;        // higher = runs first
+    private int timeSlice = 3;   // quantum for round robin
+}
+```
+
+**File: `src/kernel/scheduler/RoundRobinQueue.java`**
+```java
+// FIFO queue = Round Robin base
+private Queue<TransactionProcess> queue = new LinkedList<>();
+
+public void addProcess(TransactionProcess p) {
+    queue.add(p);       // add to tail
+}
+public TransactionProcess getNext() {
+    return queue.poll(); // remove from head = FIFO order
+}
+```
+
+**File: `src/kernel/scheduler/PriorityScheduler.java`**
+```java
+// Priority queue — higher priority runs first
+private PriorityBlockingQueue<TransactionProcess> priorityQueue
+    = new PriorityBlockingQueue<>(10,
+        (a, b) -> b.getPriority() - a.getPriority()); // higher number = first
+```
+
+**File: `src/kernel/TransactionManager.java` — Priority assignment**
+```java
+// Transfer = priority 1 (high — involves two accounts)
+new TransactionProcess("TX-"+id, task, 1);
+
+// Create account = priority 2 (highest — setup operation)
+new TransactionProcess("TX-"+id, task, 2);
+```
+
+**Explain:**
+```
+Round Robin  → fair execution, each process gets equal quantum
+Priority     → urgent operations (transfer) before routine ones
+Together     → same as Multi-Level Queue scheduling in OS theory
+```
+
+---
+
+## Demo Commands
+
+```
+create alice alice123 5000
+create bob bob123 3000
+create charlie charlie123 2000
+grant alice
+logout
+login alice alice123
+```
+
+```
+deposit alice 100
+```
+Say: "deposit becomes a TransactionProcess, submitted to scheduler, runs with priority."
+
+```
+balance alice
+```
+Say: "balance check is lower priority — if deposit was pending, it would run first."
+
+```
+grant alice
+transfer alice bob 500
+```
+Say: "transfer is highest priority — it gets scheduled before other pending operations."
+
+---
+
+---
+
+# MEMBER 3 — Deadlock Prevention
+
+---
+
+## What to Say to Mam
+
+> "Deadlock happens when two processes are stuck waiting for each other forever.
+> Classic example: Thread 1 holds lock A, wants lock B.
+>                  Thread 2 holds lock B, wants lock A.
+> Both wait forever.
+>
+> Deadlock has 4 necessary conditions:
+>   1. Mutual Exclusion
+>   2. Hold and Wait
+>   3. No Preemption
+>   4. Circular Wait
+>
+> If we ELIMINATE even ONE condition, deadlock cannot occur.
+>
+> Our project eliminates CIRCULAR WAIT by enforcing a fixed lock ordering rule:
+> Always lock accounts in alphabetical order, regardless of transfer direction.
+> This is called Resource Ordering — a standard deadlock prevention technique."
+
+---
+
+## Code to Show
+
+**File: `src/system/BankDatabase.java` — transfer() method**
+```java
+private boolean transfer(String from, String to, double amount, ...) {
+
+    // Get locks for both accounts
+    ReentrantReadWriteLock lock1 = lockManager.getLock(from);
+    ReentrantReadWriteLock lock2 = lockManager.getLock(to);
+
+    // DEADLOCK PREVENTION: always lock in alphabetical order
+    ReentrantReadWriteLock firstLock  = from.compareTo(to) <= 0 ? lock1 : lock2;
+    ReentrantReadWriteLock secondLock = from.compareTo(to) <= 0 ? lock2 : lock1;
+
+    firstLock.writeLock().lock();   // lock alphabetically first account
+    secondLock.writeLock().lock();  // then second account
+    try {
+        // perform transfer safely
+    } finally {
+        secondLock.writeLock().unlock();
+        firstLock.writeLock().unlock();
+    }
+}
+```
+
+**Explain with example:**
+```
+WITHOUT prevention:
+  Thread 1: transfer alice→bob   → locks alice, then waits for bob
+  Thread 2: transfer bob→alice   → locks bob,   then waits for alice
+  Result: DEADLOCK (circular wait)
+
+WITH prevention (alphabetical order):
+  Thread 1: transfer alice→bob   → locks ALICE first, then BOB
+  Thread 2: transfer bob→alice   → ALSO locks ALICE first, then BOB
+  Result: Thread 2 waits for alice (held by T1)
+          T1 gets alice+bob → completes → releases both
+          T2 then gets alice+bob → completes
+  No deadlock. Ever.
+```
+
+---
+
+## Demo Commands
+
+```
+create alice alice123 5000
+create bob bob123 3000
+grant alice
+grant bob
+logout
+login alice alice123
+transfer alice bob 1000
+```
+
+Say: "alice→bob: locks ALICE first (a < b alphabetically), then BOB"
+
+```
+logout
+login bob bob123
+transfer bob alice 500
+```
+
+Say: "bob→alice: ALSO locks ALICE first — same order! Circular wait is impossible by design. No runtime check needed. Deadlock is prevented structurally."
+
+```
+balance alice
+balance bob
+```
+Say: "Both balances correct — alice=4000, bob=4500. No data corruption, no deadlock."
+
+---
+
+---
+
+# MEMBER 4 — Deadlock Avoidance (Banker's Algorithm)
+
+---
+
+## What to Say to Mam
+
+> "Deadlock Prevention eliminates a condition by design.
+> Deadlock Avoidance is smarter — it allows more flexibility but
+> checks at RUNTIME whether granting a resource request is safe.
+>
+> We implemented Banker's Algorithm — named after banking systems
+> where a bank must keep enough reserve to serve all customers.
+>
+> In our project:
+>   Resource = bank account (each account is a resource to be locked)
+>   Process  = transfer transaction (needs 2 accounts: sender + receiver)
+>
+> Before EVERY transfer, Banker's Algorithm runs a Safety Algorithm:
+>   Step 1: Pretend to grant the requested accounts
+>   Step 2: Check if ALL pending processes can still complete
+>   Step 3: If YES (safe sequence found) → allow transfer
+>            If NO (unsafe state) → block transfer
+>
+> This is deadlock AVOIDANCE — we never enter an unsafe state."
+
+---
+
+## Code to Show
+
+**File: `src/kernel/BankersAlgorithm.java` — Safety Algorithm**
+```java
+public synchronized boolean requestAndCheck(String processId, Set<String> needed) {
+
+    // Step 1: Calculate available resources
+    Set<String> available = all resources - currently allocated;
+
+    // Step 2: Tentatively allocate to requesting process
+    tempAlloc.put(processId, needed);
+    tempAvailable.removeAll(needed);
+
+    // Step 3: Safety Algorithm
+    while (progress) {
+        for each process:
+            need = max - allocation          // what it still needs
+            if (available >= need):          // can it finish?
+                available += allocation      // release its resources
+                add to safe sequence
+                progress = true
+    }
+
+    // Step 4: Decision
+    if (all processes in safe sequence):
+        return true;   // SAFE → allow transfer
+    else:
+        return false;  // UNSAFE → block transfer
+}
+```
+
+**File: `src/kernel/TransactionManager.java` — Integration**
+```java
+private void submitTransfer(String from, String to, double amount) {
+
+    Set<String> needed = new HashSet<>(Arrays.asList(from, to));
+
+    // Banker's check BEFORE transfer executes
+    if (!bankersAlgorithm.requestAndCheck(processId, needed)) {
+        System.out.println("Transfer blocked — unsafe state.");
+        return; // do not proceed
+    }
+
+    // Execute transfer only if safe
+    submitKernelProcess(process);
+
+    // Release resources after completion
+    bankersAlgorithm.release(processId);
+}
+```
+
+---
+
+## Demo Commands
+
+```
+create alice alice123 5000
+create bob bob123 3000
+grant alice
+logout
+login alice alice123
+transfer alice bob 1000
+```
+
+**Output mam will see:**
+```
+BANKER'S ALGORITHM - SAFETY CHECK
+Process ID          : TX-xxxxx
+Requesting Accounts : [alice, bob]
+All Resources       : [alice, bob]
+Available Accounts  : [alice, bob]
+Active Processes    : none
+Safe Sequence       : [TX-xxxxx]
+Result              : [SAFE] Transfer approved.
+
+1000.0 transferred from alice to bob
+
+[BANKER'S] Process TX-xxxxx released accounts: [alice, bob]
+```
+
+**Say:** "See the safe sequence — the algorithm found that this process CAN complete. Resources are granted. After transfer, resources released. System always stays in safe state."
+
+**Explain difference from prevention:**
+```
+Prevention (Member 3): lock order fixed at design time, always works
+Avoidance  (Member 4): checks at runtime, can BLOCK if unsafe
+Both together: complete deadlock handling
+```
+
+---
+
+---
+
+# MEMBER 5 — Memory Management (Paging + LRU)
+
+---
+
+## What to Say to Mam
+
+> "Memory management in OS involves two key concepts:
+>
+> 1. PAGING with Address Translation:
+>    Programs use logical names. OS converts them to physical locations.
+>    Our PageTable maps operation names to CSV files — logical to physical.
+>
+> 2. LRU Page Replacement:
+>    Physical RAM is limited — it can only hold a few pages.
+>    When RAM is full and a new page is needed, OS evicts the
+>    Least Recently Used page to disk.
+>
+> In our project:
+>    RAM (limited) = LinkedHashMap with MAX_FRAMES = 5 accounts
+>    Disk          = CSV files (user.csv stores all accounts)
+>
+> When a 6th account is accessed, LRU evicts the least recently used
+> account from the cache to CSV. Accessing an evicted account triggers
+> a PAGE FAULT — it is loaded back from CSV into the cache."
+
+---
+
+## Code to Show
+
+**File: `src/system/PageTable.java` — Address Translation**
+```java
+// Logical name → Physical file (address translation)
+table.put("deposit",    "user.csv");
+table.put("login",      "auth.csv");
+table.put("loan-house", "house_loans.csv");
+
+public String getFileName(String operation) {
+    return table.get(operation); // "deposit" → "user.csv"
+}
+// Program says "deposit" — PageTable says "user.csv"
+// Just like: process uses virtual address, MMU returns physical address
+```
+
+**File: `src/system/BankDatabase.java` — LRU Frame + Page Fault**
+```java
+// Fixed frame limit = limited physical RAM
+private static final int MAX_FRAMES = 5;
+
+// LRU cache — accessOrder=true = every get() moves entry to MRU
+private final LinkedHashMap<String, Account> frames =
+    new LinkedHashMap<String, Account>(MAX_FRAMES, 0.75f, true) {
+
+    protected boolean removeEldestEntry(Map.Entry<String, Account> eldest) {
+        if (size() > MAX_FRAMES) {
+            System.out.println("[PAGE-OUT] Evicting '" + eldest.getKey() + "' (LRU)");
+            return true; // evict LRU account
+        }
+        return false;
+    }
+};
+
+// Page Fault Handler
+private Account pageIn(String name) {
+    System.out.println("[PAGE FAULT] '" + name + "' not in frames → loading from disk...");
+    // read from CSV (disk) → put into frames (RAM)
+    frames.put(name, account); // may trigger LRU eviction
+    System.out.println("[PAGE-IN] '" + name + "' loaded into frames.");
+}
+```
+
+---
+
+## Demo Commands
+
+**Fill frames step by step (show frame state after each):**
+```
+create p1 pass1 1000
+create p2 pass2 2000
+create p3 pass3 3000
+create p4 pass4 4000
+create p5 pass5 5000
+```
+After each: show frame status filling up 1/5 → 2/5 → 3/5 → 4/5 → 5/5
+
+**Now access p1 (makes p1 MRU — KEY DEMO STEP):**
+```
+balance p1
+```
+Say: "p1 accessed — TLB HIT. p1 moves to MRU end. Now p2 is LRU (least recently used)."
+
+Frame state: LRU→ [p2][p3][p4][p5][p1] ←MRU
+
+**Create 6th account — triggers LRU eviction:**
+```
+create p6 pass6 6000
+```
+Say: "Frame full! LRU policy evicts p2 — NOT p1, because p1 was recently accessed."
+
+Output: PAGE-OUT Evicting 'p2' (LRU)
+Frame: [p3][p4][p5][p1][p6]
+
+**Access evicted p2 — triggers page fault:**
+```
+balance p2
+```
+Say: "p2 is not in cache — PAGE FAULT! OS loads p2 from disk (CSV) back into a frame. Evicts p3 (new LRU)."
+
+Output:
+```
+[PAGE FAULT] 'p2' not in frames → loading from disk...
+[PAGE-OUT] Evicting 'p3' (LRU)
+[PAGE-IN]  'p2' loaded into frames.
+```
+
+**Final say:** "This demonstrates: Paging (PageTable), Address Translation, TLB hit/miss, LRU Page Replacement, Page Fault Handling, and Write-Through policy — all core Unit-V memory management concepts."
+
+---
+
+---
+
+# Quick Reference — Who Presents What
+
+| Member | Topic | Key File | Key Concept |
+|---|---|---|---|
+| 1 | Synchronization | ReadWriteManager.java | Reader-Writer locks, Critical Section |
+| 2 | Scheduling | Scheduler.java, RoundRobinQueue.java | Round Robin + Priority |
+| 3 | Deadlock Prevention | BankDatabase.java (transfer) | Lock ordering, Circular Wait eliminated |
+| 4 | Deadlock Avoidance | BankersAlgorithm.java | Safety Algorithm, Safe Sequence |
+| 5 | Memory Management | PageTable.java, BankDatabase.java | Paging, LRU, Page Fault |
+
+---
+
+# Common Viva Questions + Answers
+
+**Q: Is this a real OS or simulation?**
+A: "It is a software-level OS simulation built in Java. JVM manages actual hardware. We implement OS algorithms and concepts at the application layer — standard for university OS projects."
+
+**Q: What is the difference between prevention and avoidance?**
+A: "Prevention eliminates a deadlock condition by design (lock ordering removes circular wait — no runtime cost). Avoidance checks safety at runtime before every resource grant (Banker's algorithm — can block requests)."
+
+**Q: Why LRU and not FIFO?**
+A: "LRU evicts the account used LEAST RECENTLY — if you just accessed alice, she likely needs to be accessed again soon. FIFO ignores usage pattern and evicts whoever arrived first regardless. LRU gives better hit rate for banking workloads."
+
+**Q: What is the safe sequence in Banker's?**
+A: "The safe sequence is the order in which all active processes can complete without deadlock. If no such sequence exists, the system is in unsafe state and we block the request."
+
+**Q: What is a page fault here?**
+A: "When an account is accessed but not in the LRU cache (frames), it is a page fault. The system reads the account from CSV (disk) and loads it into a frame — exactly like OS loading a page from swap into RAM."
