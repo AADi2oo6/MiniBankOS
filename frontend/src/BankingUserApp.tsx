@@ -38,6 +38,7 @@ const BankingUserApp: React.FC = () => {
   const [simQuantum, setSimQuantum] = useState('3');
   const [simMetrics, setSimMetrics] = useState<any[]>([]);
   const [simGantt, setSimGantt] = useState<any[]>([]);
+  const [showSimResults, setShowSimResults] = useState(true);
 
   // Toast notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -279,13 +280,16 @@ const BankingUserApp: React.FC = () => {
              </motion.div>
           )}
 
-           {/* OS SCHEDULER SIMULATOR VIEW */}
+{/* OS SCHEDULER SIMULATOR VIEW */}
            {formType === 'admin-scheduler' && currentUser === 'root' && (
              <motion.div 
                key="admin-scheduler"
                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                className="w-full max-w-5xl relative z-10 space-y-6"
              >
+                <button onClick={() => setFormType('dashboard')} className="text-sm text-cyan-500 mb-2 flex items-center hover:text-cyan-400 transition-colors">
+                  <ArrowRightLeft size={14} className="rotate-180 mr-2" /> Back to Admin Dashboard
+                </button>
                 <div className="flex justify-between items-center bg-slate-900/80 p-4 rounded-xl border border-slate-700">
                     <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500 flex items-center gap-2">
                         <Activity /> Interactive CPU Scheduler Simulator
@@ -379,9 +383,21 @@ const BankingUserApp: React.FC = () => {
                 {!loading && simMetrics.length > 0 && (
                     <div className="glass-panel p-6 rounded-2xl bg-slate-900/80 border-slate-700 animate-in fade-in slide-in-from-bottom-4 shadow-2xl">
                         <h3 className="text-xl font-bold mb-6 border-b border-slate-700 pb-3 text-indigo-300 flex justify-between items-center">
-                           <span>3. Executed Run Telemetry Analytics</span>
-                           <span className="text-xs bg-indigo-900/50 text-indigo-200 px-2 py-1 rounded font-normal tracking-wide">Q={simQuantum} Time Slice Unit</span>
+                           <span className="flex items-center gap-2">
+                             <List size={20} /> 3. Executed Run Telemetry Analytics
+                             <button 
+                               onClick={() => setShowSimResults(!showSimResults)}
+                               className="ml-4 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-full border border-slate-600 transition-all flex items-center gap-2"
+                             >
+                               {showSimResults ? "Hide Details" : "Show Details"}
+                               <RefreshCw size={10} className={showSimResults ? "rotate-180" : ""} />
+                             </button>
+                           </span>
+                           <span className="text-xs bg-indigo-900/50 text-indigo-200 px-2 py-1 rounded font-normal tracking-wide">Q={simQuantum} Clock Cycles</span>
                         </h3>
+
+                        {showSimResults && (
+                          <div className="animate-in fade-in zoom-in-95 duration-300">
                         
                         {/* Analytics Banner */}
                         <div className="grid grid-cols-2 gap-6 mb-8">
@@ -477,6 +493,8 @@ const BankingUserApp: React.FC = () => {
                                 })()}
                            </div>
                         </div>
+                        </div>
+                        )}
                     </div>
                 )}
              </motion.div>

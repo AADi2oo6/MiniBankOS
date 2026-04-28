@@ -16,4 +16,4 @@ export const useBankStore = create<BankState>((set) => ({
   })),
   clearLogs: () => set({ osLogs: [] }),
   setCurrentUser: (user) => set({ currentUser: user }),
-})),
+}));
